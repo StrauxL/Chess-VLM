@@ -1,0 +1,11 @@
+__pycache__/
+*.py[cod]
+artifacts/
+images/
+models/
+ryzen_npu_export/
+sample_data/
+.env
+kaggleformer.py
+playground.py
+simulated_game.pgn
