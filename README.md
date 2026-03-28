@@ -40,3 +40,56 @@ To synthesize the C++ code into RTL architecture (Verilog/VHDL) for custom IP de
 5. Select your target FPGA/SoC part.
 6. Run **C Simulation** to verify functional correctness.
 7. Click **C Synthesis** to generate the RTL architecture.
+
+### Hardware Architecture & Optimizations
+
+The hardware accelerators for this VLM are designed using Xilinx Vitis HLS and incorporate several critical architectural optimizations to maximize throughput and minimize latency on FPGA/Edge TPU devices.
+
+#### 1. CNN Vision Tower Accelerator
+The CNN accelerator (`cnn_layer.cpp`) employs a highly parallel sliding-window architecture to process the 8x8 spatial board state geometries.
+
+* **Line Buffers & Shift Registers**: Instead of storing the entire image in memory, the hardware uses line buffers (BRAM/URAM) to cache only the rows necessary for the current 3x3 convolution window. A completely partitioned shift register (`window[14][3][3]`) allows for simultaneous access to all 126 pixels of the receptive field in a single clock cycle.
+* **Array Partitioning**: The `#pragma HLS ARRAY_PARTITION` directive completely decomposes the line buffers and local convolution windows into individual registers. This eliminates memory bottleneck constraints, feeding the massive parallel Multiplier-Accumulator (MAC) engines seamlessly.
+* **Pipelining**: Applying `#pragma HLS PIPELINE II=1` to the column loop ensures that a new pixel is processed, and a new output vector is generated every single clock cycle. 
+* **AXI4-Stream Interfaces**: The layer consumes inputs and produces outputs via `hls::stream`, synthesizing into hardware FIFO queues. This enables direct layer-to-layer communication without the latency of interacting with external DDR memory.
+
+```mermaid
+flowchart TD
+    A[AXI Stream In] --> B(Zero-Injection Padding Logic)
+    B --> C{Line Buffers}
+    C -->|Shift Row 0 & 1| D[3x3 Shift Register Window]
+    B -->|New Pixel| D
+    D --> E[Parallel MAC Engine]
+    E -->|ReLU Activation| F[AXI Stream Out]
+    
+    style A fill:#4CAF50,stroke:#388E3C,stroke-width:2px,color:#fff
+    style C fill:#2196F3,stroke:#1976D2,stroke-width:2px,color:#fff
+    style D fill:#FF9800,stroke:#F57C00,stroke-width:2px,color:#fff
+    style E fill:#9C27B0,stroke:#7B1FA2,stroke-width:2px,color:#fff
+    style F fill:#4CAF50,stroke:#388E3C,stroke-width:2px,color:#fff
+```
+
+#### 2. MLP Fully Connected Accelerator
+The MLP layers (`mlp_layer.cpp`) handle extremely dense matrix multiplications (e.g., projecting 384 features to 1536).
+
+* **Tiled Matrix Processing (Block Processing)**: The matrix multiplication is chunked into `BLOCK_SIZE` tiles (e.g., 16 elements).
+* **Cyclic Array Partitioning**: The input buffers and the weight matrices are partitioned cyclically (`#pragma HLS ARRAY_PARTITION ... cyclic factor=16`). This maps perfectly to block processing, allowing 16 memory reads simultaneously.
+* **Loop Unrolling**: The inner tile multiplication loop uses `#pragma HLS UNROLL`, synthesizing directly into parallel DSP slices (hard-silicon multipliers).
+* **Fixed-Point Quantization**: Both accelerators utilize `ap_fixed<16, 6>` data types, optimizing DSP usage and saving BRAM while maintaining inference accuracy.
+
+```mermaid
+flowchart LR
+    A[AXI Stream Input] --> B[Cyclic Partitioned Local Buffer]
+    B --> C(Block Size Chunking: 16)
+    C --> D[Parallel DSP Multipliers]
+    W[Cyclic Partitioned Weights] --> D
+    D --> E[Accumulator Tree]
+    E --> F{ReLU Activation}
+    F --> G[Output Vector / RAM]
+
+    style A fill:#4CAF50,stroke:#388E3C,stroke-width:2px,color:#fff
+    style B fill:#2196F3,stroke:#1976D2,stroke-width:2px,color:#fff
+    style D fill:#9C27B0,stroke:#7B1FA2,stroke-width:2px,color:#fff
+    style W fill:#FFC107,stroke:#FFA000,stroke-width:2px,color:#000
+    style E fill:#F44336,stroke:#D32F2F,stroke-width:2px,color:#fff
+```
