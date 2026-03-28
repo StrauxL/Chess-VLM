@@ -24,3 +24,19 @@ To run inference and generate games locally:
 ```bash
 python fetch_and_infer.py
 ```
+
+## Hardware Accelerator (CNN-MLP)
+The repository now includes C++ implementations for hardware acceleration of the Vision Tower (CNN) and Multi-Layer Perceptron (MLP) components, located in the `Hardware Accelerator CNN-MLP` directory.
+- **CNN Accelerator (`cnn_layer.cpp`)**: Hardware-optimized implementation of the 3-layer CNN used for encoding spatial board geometry.
+- **MLP Accelerator (`mlp_layer.cpp`)**: Hardware-optimized implementation for fully connected layers.
+- **Tensor Processing Unit (`tensor_processing_unit.cpp`)**: A top-level wrapper that integrates the CNN and MLP layers for streamlined hardware execution.
+
+### How to Run C-Synthesis in Vitis HLS
+To synthesize the C++ code into RTL architecture (Verilog/VHDL) for custom IP deployment on Edge TPUs or FPGAs:
+1. Open Xilinx Vitis HLS.
+2. Create a new project and add the C++ source files from the `Hardware Accelerator CNN-MLP` directory (`cnn_layer.cpp`, `mlp_layer.cpp`, `tensor_processing_unit.cpp`, `weights.h`).
+3. Add `tensor_processing_unit_tb.cpp` as the testbench file.
+4. Specify `tensor_processing_unit` as the top-level function.
+5. Select your target FPGA/SoC part.
+6. Run **C Simulation** to verify functional correctness.
+7. Click **C Synthesis** to generate the RTL architecture.

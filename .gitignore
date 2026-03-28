@@ -5,5 +5,6 @@ images/
 models/
 ryzen_npu_export/
 sample_data/
+stockfish/
 .env
 kaggleformer.py
